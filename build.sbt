@@ -1,6 +1,11 @@
 import ReleaseTransformations._
 import microsites._
 
+inThisBuild(Seq( // TODO: Remove me once https://github.com/scala/scala/pull/5310 is released.
+  scalaOrganization := "org.typelevel",
+  scalaVersion      := "2.12.4-bin-typelevel-4"
+))
+
 // Only run WartRemover on 2.12
 def schemasafeWarts(sv: String) =
   CrossVersion.partialVersion(sv) match {
@@ -23,8 +28,8 @@ lazy val compilerFlags = Seq(
           "-Xlint",
           "-Xfatal-warnings",
           "-unchecked",
-          "-Yno-imports",
           "-Ywarn-numeric-widen",
+          "-Yliteral-types",
         )
       case _ =>
         Seq(
@@ -58,7 +63,6 @@ lazy val compilerFlags = Seq(
           "-Xlint:type-parameter-shadow",      // A local type parameter shadows a type already in scope.
           "-Xlint:unsound-match",              // Pattern match may not be typesafe.
           "-Yno-adapted-args",                 // Do not adapt an argument list (either by inserting () or creating a tuple) to match the receiver.
-          "-Yno-imports",                      // No predef or default imports
           "-Ypartial-unification",             // Enable partial unification in type constructor inference
           "-Ywarn-dead-code",                  // Warn when dead code is identified.
           "-Ywarn-extra-implicit",             // Warn when more than one implicit parameter section is defined.
@@ -74,6 +78,7 @@ lazy val compilerFlags = Seq(
           "-Ywarn-unused:patvars",             // Warn if a variable bound in a pattern is unused.
           "-Ywarn-unused:privates",            // Warn if a private member is unused.
           "-Ywarn-value-discard",              // Warn when non-Unit expression results are unused.
+          "-Yliteral-types",
         )
     }
   ),
@@ -99,14 +104,13 @@ lazy val buildSettings = Seq(
 	licenses ++= Seq(
 		("Apache 2.0", url("https://opensource.org/licenses/Apache-2.0"))
 	),
-	scalaVersion := "2.12.4",
-	crossScalaVersions := Seq("2.10.6", "2.11.11", scalaVersion.value)
+//	scalaVersion := "2.12.4",
+//	crossScalaVersions := Seq("2.10.6", "2.11.11", scalaVersion.value)
 )
 
 lazy val commonSettings =
 	compilerFlags ++ Seq(
     wartremoverErrors in (Compile, compile) := schemasafeWarts(scalaVersion.value),
-    wartremoverErrors in (Test,    compile) := schemasafeWarts(scalaVersion.value),
 		parallelExecution in Test := false,
     publishTo := {
       val nexus = "https://oss.sonatype.org/"
@@ -143,8 +147,8 @@ lazy val noPublishSettings = Seq(
 lazy val schemasafe = project.in(file("."))
   .settings(buildSettings ++ commonSettings)
   .settings(noPublishSettings)
-  .dependsOn(coreJVM, coreJS, testsJVM, testsJS)
-  .aggregate(coreJVM, coreJS, testsJVM, testsJS)
+  .dependsOn(coreJVM, testsJVM) // coreJs, testsJs
+  .aggregate(coreJVM, testsJVM) // coreJs, testsJs
   .settings(
     releaseCrossBuild := true,
     releaseProcess := Seq[ReleaseStep](
@@ -165,15 +169,22 @@ lazy val schemasafe = project.in(file("."))
     )
   )
 
-lazy val core = 
+lazy val core =
   crossProject
     .crossType(CrossType.Pure)
     .in(file("modules/core"))
     .settings(buildSettings ++ commonSettings ++ publishSettings)
-    .settings(name := "schemasafe-core")
+    .settings(
+      name := "schemasafe-core",
+      libraryDependencies ++= Seq(
+        "eu.timepit" %% "singleton-ops" % Versions.singletonOps,
+        compilerPlugin("com.github.ghik" %% "silencer-plugin" % Versions.silencer),
+        "com.github.ghik" %% "silencer-lib" % Versions.silencer
+      )
+    )
 
 lazy val coreJVM = core.jvm
-lazy val coreJS = core.js
+//lazy val coreJS = core.js
 
 lazy val tests = 
   crossProject
@@ -185,7 +196,7 @@ lazy val tests =
     .settings(name := "schemasafe-tests")
 
 lazy val testsJVM = tests.jvm
-lazy val testsJS = tests.js
+//lazy val testsJS = tests.js
 
 lazy val docs = project.in(file("modules/docs")).dependsOn(coreJVM)
   .settings(buildSettings ++ commonSettings ++ noPublishSettings)
